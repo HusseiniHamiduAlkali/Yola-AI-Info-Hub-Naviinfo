@@ -1118,58 +1118,67 @@ window.initNaviMapInstance = function() {
 // Common helper for Gemini API call
 async function getGeminiAnswer(localData, msg, apiKey, imageData = null) {
   try {
+    // 1. Use the correct model ID for Gemini 2.5 Flash
+    const modelVersion = 'gemini-2.5-flash'; 
+    
+    // 2. Point directly to Google's API URL
+    const serverUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelVersion}:generateContent?key=${apiKey}`;
+
     const contents = {
       parts: []
     };
+    
+    // Add prompt and context
+    const promptGuide = localStorage.getItem('navi_ai_prompt') || (window.NAVI_AI_PROMPT || "You are a helpful assistant.");
+    const fullText = `${promptGuide}\n\n--- LOCAL DATA START ---\n${localData}\n--- LOCAL DATA END ---\n\nUser question: ${msg}`;
+    
+    contents.parts.push({ text: fullText });
+
+    // Handle Image if present
     if (imageData) {
-      contents.parts.push({
+       // Remove the "data:image/jpeg;base64," prefix if present
+       const base64Data = imageData.split(',')[1];
+       contents.parts.push({
         inlineData: {
           mimeType: "image/jpeg",
-          data: imageData.split(',')[1]
+          data: base64Data
         }
       });
     }
-    const promptGuide = localStorage.getItem('navi_ai_prompt') || NAVI_AI_PROMPT;
-    contents.parts.push({
-      text: `${promptGuide}\n\n--- LOCAL DATA START ---\n${localData}\n--- LOCAL DATA END ---\n\nUser question: ${msg}`
-    });
-    const modelVersion = imageData ? 'gemini-pro-vision' : (window.useGemini25 ? 'gemini-2.5-flash' : 'gemini-1.5-flash');
-    let body = JSON.stringify({ model: modelVersion, contents: [contents] });
-    
-    // Determine the server URL based on the environment
-    const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? (window.API_BASE || 'http://localhost:4000') + '/api/gemini'
-      : 'https://yolainfohub.netlify.app/api/gemini';
-      
+
+    const body = JSON.stringify({ contents: [contents] });
+
+    // 3. Fetch directly from Google
     let res = await fetch(serverUrl, { 
       method: 'POST', 
       headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Content-Type': 'application/json'
       },
-      credentials: 'include',
-      mode: 'cors',
       body,
       signal: window.naviAbortController?.signal
     });
-    let data = await res.json();
-    if (data.error && window.useGemini25 && !imageData) {
-      // fallback to 1.5
-      body = JSON.stringify({ model: 'gemini-1.5-flash', contents: [contents] });
-      res = await fetch(serverUrl, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body,
-        signal: window.naviAbortController?.signal
-      });
-      data = await res.json();
+
+    if (!res.ok) {
+       // This will log the specific error (e.g., 400 Bad Request or 403 Forbidden)
+       const errorData = await res.json();
+       console.error("Gemini API Error:", errorData);
+       throw new Error(`API Error: ${res.status}`);
     }
-    return (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) ? data.candidates[0].content.parts[0].text : "Sorry, I couldn't get a response from the AI.";
+
+    let data = await res.json();
+    
+    // Extract text from response
+    return (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0].text) 
+      ? data.candidates[0].content.parts[0].text 
+      : "Sorry, I couldn't get a response from the AI.";
+
   } catch (err) {
-    console.error("Error contacting AI service:", err);
+    console.error("FULL ERROR DETAILS:", err);
+    // If it's a real network error, this message is appropriate. 
+    // If it's an API key error, the console.error above will show it.
     return "Sorry, I could not access local information or the AI at this time. Pls check your internet connection!";
   }
-}
+            }
 
 // Common function to format AI responses
 function formatAIResponse(text) {
@@ -1449,3 +1458,4 @@ window.sendNaviMessage = async function(faqText = '') {
   if (stopBtn) stopBtn.style.display = 'none';
   window.naviAbortController = null;
 }};
+
