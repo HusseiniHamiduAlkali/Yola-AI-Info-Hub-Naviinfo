@@ -1,5 +1,4 @@
-// Replace with your actual TomTom API Key
-const TOMTOM_KEY = 'YOUR_TOMTOM_API_KEY';
+
 
 
 
@@ -1102,6 +1101,11 @@ window.renderSection = function() {
       </div>
     </section>
   `;
+
+  // Replace with your actual TomTom API Key
+  const TOMTOM_KEY = 'HnVUaWiRst64AFqBqoeUgmgq28nCaqND';
+
+    
   // Load keyless Google Maps script if not already loaded
   let mapLoaded = false;
   const mapDiv = document.getElementById('navi-map');
@@ -1563,3 +1567,4 @@ window.sendNaviMessage = async function(faqText = '') {
   if (stopBtn) stopBtn.style.display = 'none';
   window.naviAbortController = null;
 }};
+
