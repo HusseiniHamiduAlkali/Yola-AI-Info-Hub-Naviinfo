@@ -1,3 +1,5 @@
+// Replace with your actual TomTom API Key
+const TOMTOM_KEY = 'YOUR_TOMTOM_API_KEY';
 
 
 
@@ -245,6 +247,51 @@ window.initMap = function() {
     }
 };
 
+
+
+
+/**
+* Updated Draw Route to use TomTom points on Google Map
+*/
+window.drawRoute = async function(origin, destination) {
+    if (!window.map) return false;
+   
+    try {
+        const routeData = await window.getRouteData(origin, destination);
+       
+        // Convert TomTom points to Google Maps LatLng
+        const path = routeData.points.map(p => ({ lat: p.latitude, lng: p.longitude }));
+
+        // Remove old route if exists
+        if (window.currentPath) window.currentPath.setMap(null);
+
+        // Draw the new path on the existing Google Map
+        window.currentPath = new google.maps.Polyline({
+            path: path,
+            geodesic: true,
+            strokeColor: '#3182ce',
+            strokeOpacity: 0.8,
+            strokeWeight: 5
+        });
+
+        window.currentPath.setMap(window.map);
+
+        // Auto-zoom map to fit the route
+        const bounds = new google.maps.LatLngBounds();
+        path.forEach(p => bounds.extend(p));
+        window.map.fitBounds(bounds);
+
+        return routeData; // Return data so AI can display it
+    } catch (e) {
+        console.error("Failed to draw route:", e);
+        return false;
+    }
+};
+
+
+
+
+
 // Function to show location on map
 window.showLocation = async function(locationName) {
     if (!window.map) return;
@@ -292,38 +339,24 @@ window.showLocation = async function(locationName) {
 // Function to draw route between two points using Google Maps
 // This function has been moved to mapDirections.js for better organization and reliability
 
-// Function to calculate distance between points
+
+
+// Update the global distance function
 window.calculateDistance = async function(origin, destination) {
-    if (!window.map) {
-        throw new Error('Map not initialized');
-    }
-
-    try {
-        // Add "Yola" to searches if not present
-        if (!origin.toLowerCase().includes('yola')) origin += ' Yola, Nigeria';
-        if (!destination.toLowerCase().includes('yola')) destination += ' Yola, Nigeria';
-
-        // Geocode both points
-        const [originData, destData] = await Promise.all([
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin)}`).then(r => r.json()),
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination)}`).then(r => r.json())
-        ]);
-
-        if (originData[0] && destData[0]) {
-            const route = await fetch(`https://router.project-osrm.org/route/v1/driving/${originData[0].lon},${originData[0].lat};${destData[0].lon},${destData[0].lat}?overview=false`).then(r => r.json());
-            
-            if (route.routes && route.routes[0]) {
-                const distanceKm = (route.routes[0].distance / 1000).toFixed(1);
-                return `${distanceKm} km`;
-            }
-        }
-        throw new Error('Could not calculate distance');
-    } catch (error) {
-        console.error('Distance calculation failed:', error);
-        throw error;
-    }
+    const data = await window.getRouteData(origin, destination);
+    return data.distance;
 };
 
+
+
+
+// Update the global time function
+window.estimateTravelTime = async function(origin, destination) {
+    const data = await window.getRouteData(origin, destination);
+    return data.time;
+};
+
+/*
 // Function to estimate travel time
 window.estimateTravelTime = async function(origin, destination) {
     if (!window.map) {
@@ -361,6 +394,7 @@ window.estimateTravelTime = async function(origin, destination) {
         throw error;
     }
 };
+*/
 
 window.naviAbortController = window.naviAbortController || null;
 
@@ -1115,23 +1149,92 @@ window.initNaviMapInstance = function() {
   window.naviDirectionsService = new google.maps.DirectionsService();
 };
 
-// Common helper for Gemini API call
+
+
+
+
+
+
+/**
+* Formats seconds into a readable string: X hrs, Y min, Z sec
+*/
+function formatDuration(seconds) {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    let parts = [];
+    if (hrs > 0) parts.push(`${hrs} hrs`);
+    if (mins > 0) parts.push(`${mins} min`);
+    if (secs > 0 || parts.length === 0) parts.push(`${secs} sec`);
+   
+    return parts.join(', ');
+}
+
+
+/**
+* Uses TomTom API to calculate route data
+* This replaces the OSRM calls for better accuracy.
+*/
+window.getRouteData = async function(origin, destination) {
+    try {
+        // 1. Geocode addresses to Lat/Lng (using Google or TomTom)
+        // For consistency with your current setup, we'll use a simple fetch to TomTom Geocoding
+        const geocode = async (query) => {
+            const q = query.toLowerCase().includes('yola') ? query : `${query}, Yola, Nigeria`;
+            const url = `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(q)}.json?key=${TOMTOM_KEY}`;
+            const res = await fetch(url).then(r => r.json());
+            if (!res.results || res.results.length === 0) throw new Error(`Location not found: ${query}`);
+            return res.results[0].position; // returns {lat, lon}
+        };
+
+        const startPos = await geocode(origin);
+        const endPos = await geocode(destination);
+
+        // 2. Fetch Routing from TomTom
+        const routeUrl = `https://api.tomtom.com/routing/1/calculateRoute/${startPos.lat},${startPos.lon}:${endPos.lat},${endPos.lon}/json?key=${TOMTOM_KEY}&travelMode=car`;
+        const routeRes = await fetch(routeUrl).then(r => r.json());
+       
+        if (!routeRes.routes || routeRes.routes.length === 0) throw new Error("No route found");
+
+        const summary = routeRes.routes[0].summary;
+        const distanceKm = (summary.lengthInMeters / 1000).toFixed(2);
+        const durationSec = summary.travelTimeInSeconds;
+
+        return {
+            distance: `${distanceKm} km`,
+            time: formatDuration(durationSec),
+            points: routeRes.routes[0].legs[0].points // Can be used to draw on Google Maps
+        };
+    } catch (error) {
+        console.error("TomTom Routing Error:", error);
+        throw error;
+    }
+};
+
+
+
+
+
+
+
+
 async function getGeminiAnswer(localData, msg, apiKey, imageData = null) {
   try {
     // 1. Use the correct model ID for Gemini 2.5 Flash
-    const modelVersion = 'gemini-2.5-flash'; 
-    
+    const modelVersion = 'gemini-2.5-flash';
+   
     // 2. Point directly to Google's API URL
     const serverUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelVersion}:generateContent?key=${apiKey}`;
 
     const contents = {
       parts: []
     };
-    
+   
     // Add prompt and context
     const promptGuide = localStorage.getItem('navi_ai_prompt') || (window.NAVI_AI_PROMPT || "You are a helpful assistant.");
     const fullText = `${promptGuide}\n\n--- LOCAL DATA START ---\n${localData}\n--- LOCAL DATA END ---\n\nUser question: ${msg}`;
-    
+   
     contents.parts.push({ text: fullText });
 
     // Handle Image if present
@@ -1149,9 +1252,9 @@ async function getGeminiAnswer(localData, msg, apiKey, imageData = null) {
     const body = JSON.stringify({ contents: [contents] });
 
     // 3. Fetch directly from Google
-    let res = await fetch(serverUrl, { 
-      method: 'POST', 
-      headers: { 
+    let res = await fetch(serverUrl, {
+      method: 'POST',
+      headers: {
         'Content-Type': 'application/json'
       },
       body,
@@ -1166,19 +1269,21 @@ async function getGeminiAnswer(localData, msg, apiKey, imageData = null) {
     }
 
     let data = await res.json();
-    
+   
     // Extract text from response
-    return (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0].text) 
-      ? data.candidates[0].content.parts[0].text 
+    return (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0].text)
+      ? data.candidates[0].content.parts[0].text
       : "Sorry, I couldn't get a response from the AI.";
 
   } catch (err) {
     console.error("FULL ERROR DETAILS:", err);
-    // If it's a real network error, this message is appropriate. 
+    // If it's a real network error, this message is appropriate.
     // If it's an API key error, the console.error above will show it.
     return "Sorry, I could not access local information or the AI at this time. Pls check your internet connection!";
   }
-            }
+}
+
+
 
 // Common function to format AI responses
 function formatAIResponse(text) {
@@ -1458,4 +1563,3 @@ window.sendNaviMessage = async function(faqText = '') {
   if (stopBtn) stopBtn.style.display = 'none';
   window.naviAbortController = null;
 }};
-
