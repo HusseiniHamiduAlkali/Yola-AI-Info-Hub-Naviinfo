@@ -11,10 +11,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+
       - name: Inject Secrets into app.js
         run: |
-          sed -i 's|\[\[GEMINI_API_KEY_PLACEHOLDER\]\]|${{ secrets.GEMINI_API_KEY }}|g' app.js
-          sed -i 's|\[\[MAPS_API_KEY_PLACEHOLDER\]\]|${{ secrets.MAPS_API_KEY }}|g' app.js
+          sed -i "s|'\[\[GEMINI_API_KEY_PLACEHOLDER\]\]'|'${{ secrets.GEMINI_API_KEY }}'|g" app.js
+          sed -i "s|'\[\[MAPS_API_KEY_PLACEHOLDER\]\]'|'${{ secrets.MAPS_API_KEY }}'|g" app.js
+
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
