@@ -1,0 +1,23 @@
+name: Secure Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main] # Runs when you push to the main branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Inject Secrets into app.js
+        run: |
+          sed -i 's|\[\[GEMINI_API_KEY_PLACEHOLDER\]\]|${{ secrets.GEMINI_API_KEY }}|g' app.js
+          sed -i 's|\[\[MAPS_API_KEY_PLACEHOLDER\]\]|${{ secrets.MAPS_API_KEY }}|g' app.js
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: . 
+          branch: gh-pages # This creates a clean branch for your live site
