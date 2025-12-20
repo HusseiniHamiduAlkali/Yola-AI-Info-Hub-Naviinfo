@@ -1,8 +1,10 @@
-// --- BEGIN HARDCODED API KEYS ---
-// window.GEMINI_API_KEY = 'AIzaSyAZ9TgevsUjCvczgJ31FHSUI1yZ25olZ9U';
-window.GEMINI_API_KEY = 'AIzaSyArPKdTVKP-iFQA5SxQ5SUWEyJGllP9D7Q';
-window.MAPS_API_KEY = 'AIzaSyDMKnF-SynUDvcQRTubKH31V7tGflUognY';
-// --- END HARDCODED API KEYS ---
+
+
+// --- BEGIN API KEYS (PLACEHOLDERS) ---
+// These will be replaced automatically during deployment via GitHub Actions
+window.GEMINI_API_KEY = '[[GEMINI_API_KEY_PLACEHOLDER]]';
+window.MAPS_API_KEY = '[[MAPS_API_KEY_PLACEHOLDER]]';
+// --- END API KEYS ---
 
 // Ensure navbar is loaded
 function ensureNavbarLoaded() {
